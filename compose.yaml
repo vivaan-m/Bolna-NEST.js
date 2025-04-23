@@ -1,11 +1,11 @@
-version: '3.8'
-
 services:
-  app:
+  api:
     build:
       context: .
-      dockerfile: Dockerfile.app
-    container_name: bolna-nest-app
+      dockerfile: Dockerfile.api
+      args:
+        - APP_TYPE=api
+    container_name: bolna-api
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -14,10 +14,35 @@ services:
       - PORT=3000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - APP_TYPE=api
       # Add your API keys here or use a .env file
       # - OPENAI_API_KEY=your_openai_api_key
       # - DEEPGRAM_AUTH_TOKEN=your_deepgram_auth_token
       # - ELEVENLABS_API_KEY=your_elevenlabs_api_key
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
+    networks:
+      - bolna-network
+      
+  telephony:
+    build:
+      context: .
+      dockerfile: Dockerfile.telephony
+      args:
+        - APP_TYPE=telephony
+    container_name: bolna-telephony
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - APP_TYPE=telephony
+      # Add your telephony API keys here or use a .env file
       # - TWILIO_ACCOUNT_SID=your_twilio_account_sid
       # - TWILIO_AUTH_TOKEN=your_twilio_auth_token
       # - TWILIO_PHONE_NUMBER=your_twilio_phone_number

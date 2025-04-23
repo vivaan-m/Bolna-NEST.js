@@ -27,13 +27,21 @@ sudo docker compose up -d
 echo "Waiting for the application to start..."
 sleep 5
 
-# Check if the application is running
-echo "Checking if the application is running..."
+# Check if the API server is running
+echo "Checking if the API server is running..."
 if curl -s http://localhost:3000 | grep -q "Bolna"; then
-    echo "✅ Application is running successfully!"
-    echo "You can access the application at http://localhost:3000"
+    echo "✅ API server is running successfully!"
+    echo "You can access the API server at http://localhost:3000"
 else
-    echo "❌ Application failed to start. Please check the logs with 'sudo docker compose logs -f'"
+    echo "❌ API server failed to start. Please check the logs with 'sudo docker compose logs api'"
+fi
+
+# Check if the Telephony server is running
+echo "Checking if the Telephony server is running..."
+if curl -s http://localhost:3001 | grep -q "Cannot GET"; then
+    echo "✅ Telephony server is running successfully on port 3001"
+else
+    echo "❌ Telephony server failed to start. Please check the logs with 'sudo docker compose logs telephony'"
 fi
 
 echo ""

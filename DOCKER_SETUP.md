@@ -4,26 +4,38 @@ This document explains the Docker setup for the Bolna Nest.js application.
 
 ## Files Created
 
-1. **Dockerfile**: Defines the build process for the Nest.js application.
-2. **docker-compose.yml**: Orchestrates the application and Redis services.
-3. **.dockerignore**: Excludes unnecessary files from the Docker build context.
-4. **docker-run.sh**: A helper script to build and run the Docker containers.
-5. **docker-test.sh**: A script to test the Docker setup.
+1. **Dockerfile.api**: Defines the build process for the API server.
+2. **Dockerfile.telephony**: Defines the build process for the Telephony server.
+3. **compose.yaml**: Orchestrates the API, Telephony, and Redis services.
+4. **.dockerignore**: Excludes unnecessary files from the Docker build context.
+5. **docker-run.sh**: A helper script to build and run the Docker containers.
+6. **docker-test.sh**: A script to test the Docker setup.
+7. **tsconfig.telephony.json**: TypeScript configuration for the Telephony server.
 
 ## Docker Setup
 
-The Docker setup consists of two services:
+The Docker setup consists of three services:
 
-1. **app**: The Nest.js application
-   - Built from the Dockerfile
+1. **api**: The main API server
+   - Built from the Dockerfile.api
    - Exposes port 3000
    - Connects to Redis
    - Uses environment variables from .env file
+   - Handles API requests, agent management, etc.
 
-2. **redis**: Redis database
+2. **telephony**: The Telephony server
+   - Built from the Dockerfile.telephony
+   - Exposes port 3001
+   - Connects to Redis
+   - Uses environment variables from .env file
+   - Handles telephony-related operations (Twilio, Plivo)
+   - Designed to handle higher load for call processing
+
+3. **redis**: Redis database
    - Uses the official Redis Alpine image
    - Persists data using a Docker volume
    - Exposes port 6379
+   - Used for communication between API and Telephony servers
 
 ## Running with Docker
 

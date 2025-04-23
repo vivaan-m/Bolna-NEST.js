@@ -9,11 +9,21 @@ async function bootstrap() {
   
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
+  const appType = configService.get<string>('APP_TYPE', 'api');
   
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
   
   await app.listen(port);
-  logger.log(`Application is running on: http://localhost:${port}`);
+  
+  if (appType === 'api') {
+    logger.log(`API server is running on: http://localhost:${port}`);
+  } else {
+    logger.log(`Application is running on: http://localhost:${port}`);
+  }
 }
-bootstrap();
+
+// Only bootstrap if this is not the telephony server
+if (process.env.APP_TYPE !== 'telephony') {
+  bootstrap();
+}

@@ -83,22 +83,34 @@ npm run start:prod
 
 #### Using Docker
 
-The application can be run using Docker and Docker Compose, which includes both the application and Redis:
+The application can be run using Docker and Docker Compose, which includes the API server, Telephony server, and Redis:
 
 1. Build and start the containers:
    ```bash
    sudo docker compose up -d
    ```
 
-2. View logs:
+2. View logs for all services:
    ```bash
    sudo docker compose logs -f
    ```
 
-3. Stop the containers:
+3. View logs for a specific service:
+   ```bash
+   sudo docker compose logs -f api
+   sudo docker compose logs -f telephony
+   sudo docker compose logs -f redis
+   ```
+
+4. Stop the containers:
    ```bash
    sudo docker compose down
    ```
+
+The services will be available at:
+- API Server: http://localhost:3000
+- Telephony Server: http://localhost:3001
+- Redis: localhost:6379
 
 ## API Endpoints
 

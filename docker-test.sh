@@ -14,13 +14,22 @@ fi
 echo "Waiting for the application to start..."
 sleep 10
 
-# Test the API
-echo "Testing the API..."
+# Test the API server
+echo "Testing the API server..."
 curl -s http://localhost:3000 | grep -q "Bolna"
 if [ $? -eq 0 ]; then
-  echo "✅ API is running successfully!"
+  echo "✅ API server is running successfully!"
 else
-  echo "❌ API test failed!"
+  echo "❌ API server test failed!"
+fi
+
+# Test the Telephony server
+echo "Testing the Telephony server..."
+curl -s http://localhost:3001 | grep -q "Cannot GET"
+if [ $? -eq 0 ]; then
+  echo "✅ Telephony server is running successfully!"
+else
+  echo "❌ Telephony server test failed!"
 fi
 
 # Check Redis connection
