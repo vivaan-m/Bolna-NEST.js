@@ -1,17 +1,14 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-      args:
-        - APP_TYPE=api
+    image: node:18-alpine
     container_name: bolna-api
     restart: unless-stopped
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=${PORT:-3000}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - APP_TYPE=api
@@ -20,25 +17,27 @@ services:
       # - DEEPGRAM_AUTH_TOKEN=your_deepgram_auth_token
       # - ELEVENLABS_API_KEY=your_elevenlabs_api_key
     volumes:
-      - ./.env:/app/.env:ro
+      - ./:/app
+    command: >
+      sh -c "npm install && 
+             npm install -g @nestjs/cli && 
+             npm run build && 
+             node dist/main"
     depends_on:
       - redis
     networks:
       - bolna-network
       
   telephony:
-    build:
-      context: .
-      dockerfile: Dockerfile.telephony
-      args:
-        - APP_TYPE=telephony
+    image: node:18-alpine
     container_name: bolna-telephony
     restart: unless-stopped
+    working_dir: /app
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=${TELEPHONY_PORT:-3001}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - APP_TYPE=telephony
@@ -50,7 +49,12 @@ services:
       # - PLIVO_AUTH_TOKEN=your_plivo_auth_token
       # - PLIVO_PHONE_NUMBER=your_plivo_phone_number
     volumes:
-      - ./.env:/app/.env:ro
+      - ./:/app
+    command: >
+      sh -c "npm install && 
+             npm install -g @nestjs/cli && 
+             npm run build && 
+             node dist/telephony"
     depends_on:
       - redis
     networks:

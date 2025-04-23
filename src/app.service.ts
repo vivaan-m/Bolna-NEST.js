@@ -39,21 +39,31 @@ export class AppService {
           <p>Welcome to the Bolna Voice AI Platform API. This platform provides services for building voice-driven conversational AI agents.</p>
           
           <div class="endpoints">
-            <h2>Available Endpoints:</h2>
+            <h2>API Server Endpoints (Port 3000):</h2>
             <ul>
               <li><code>GET /agents</code> - List all agents</li>
               <li><code>POST /agents</code> - Create a new agent</li>
               <li><code>GET /agents/:id</code> - Get an agent by ID</li>
               <li><code>PUT /agents/:id</code> - Update an agent</li>
               <li><code>DELETE /agents/:id</code> - Delete an agent</li>
-              <li><code>POST /telephony/call</code> - Initiate a call</li>
-              <li><code>DELETE /telephony/call/:provider/:callId</code> - End a call</li>
             </ul>
           </div>
           
-          <p>For more information, please refer to the API documentation or README.</p>
+          <div class="endpoints">
+            <h2>Telephony Server Endpoints (Port 3001):</h2>
+            <ul>
+              <li><code>POST /telephony/call</code> - Initiate a call</li>
+              <li><code>DELETE /telephony/call/:provider/:callId</code> - End a call</li>
+              <li><code>POST /telephony/twilio/webhook</code> - Twilio webhook endpoint</li>
+              <li><code>POST /telephony/plivo/webhook</code> - Plivo webhook endpoint</li>
+              <li><code>GET /telephony/webhook-url/:provider</code> - Get webhook URL for provider</li>
+            </ul>
+          </div>
           
-          <p>Server is up and running!</p>
+          <p>For more information, please refer to the <a href="https://github.com/yourusername/bolna-nest/blob/main/README.md">README</a> or <a href="https://github.com/yourusername/bolna-nest/blob/main/DOCKER_SETUP.md">DOCKER_SETUP.md</a>.</p>
+          
+          <p><strong>API Server</strong> is running on port 3000!</p>
+          <p><strong>Telephony Server</strong> is running on port 3001!</p>
         </body>
       </html>
     `;

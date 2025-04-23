@@ -19,13 +19,15 @@ if [ ! -f .env ]; then
     echo "Please edit the .env file to add your API keys."
 fi
 
+# No need to rebuild the application, it will be built inside the container
+
 # Build and start the containers
 echo "Building and starting containers..."
-sudo docker compose up -d
+sudo docker compose up -d --build
 
-# Wait for the application to start
-echo "Waiting for the application to start..."
-sleep 5
+# Wait for the application to start (longer wait time for building)
+echo "Waiting for the application to start (this may take a minute)..."
+sleep 30
 
 # Check if the API server is running
 echo "Checking if the API server is running..."
@@ -38,7 +40,7 @@ fi
 
 # Check if the Telephony server is running
 echo "Checking if the Telephony server is running..."
-if curl -s http://localhost:3001 | grep -q "Cannot GET"; then
+if curl -s http://localhost:3001 | grep -q "Bolna"; then
     echo "✅ Telephony server is running successfully on port 3001"
 else
     echo "❌ Telephony server failed to start. Please check the logs with 'sudo docker compose logs telephony'"

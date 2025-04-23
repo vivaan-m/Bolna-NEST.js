@@ -9,10 +9,18 @@ async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const configService = app.get(config_1.ConfigService);
     const port = configService.get('PORT', 3000);
+    const appType = configService.get('APP_TYPE', 'api');
     app.useGlobalPipes(new common_1.ValidationPipe());
     app.enableCors();
     await app.listen(port);
-    logger.log(`Application is running on: http://localhost:${port}`);
+    if (appType === 'api') {
+        logger.log(`API server is running on: http://localhost:${port}`);
+    }
+    else {
+        logger.log(`Application is running on: http://localhost:${port}`);
+    }
 }
-bootstrap();
+if (process.env.APP_TYPE !== 'telephony') {
+    bootstrap();
+}
 //# sourceMappingURL=main.js.map

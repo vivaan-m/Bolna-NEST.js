@@ -83,7 +83,15 @@ npm run start:prod
 
 #### Using Docker
 
-The application can be run using Docker and Docker Compose, which includes the API server, Telephony server, and Redis:
+The application uses a microservices architecture with Docker Compose, consisting of three services:
+
+1. **API Server**: Handles general API requests, agent management, and client interactions.
+2. **Telephony Server**: Dedicated to handling telephony operations (Twilio, Plivo) and call processing.
+3. **Redis**: Acts as a message broker and shared data store between the API and Telephony servers.
+
+For more details about the architecture, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+
+To run the application with Docker:
 
 1. Build and start the containers:
    ```bash
