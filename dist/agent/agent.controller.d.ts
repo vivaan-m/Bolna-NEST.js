@@ -63,10 +63,6 @@ declare class ConversationDetailsDto implements ConversationDetails {
     user_prompt_templates?: Record<string, string>;
     assistant_prompt_templates?: Record<string, string>;
 }
-declare class CreateAgentDto {
-    config: AgentConfigDto;
-    conversation_details?: ConversationDetailsDto;
-}
 declare class UpdateAgentDto {
     config?: Partial<AgentConfigDto>;
     conversation_details?: ConversationDetailsDto;
@@ -75,7 +71,7 @@ export declare class AgentController {
     private readonly agentService;
     private readonly logger;
     constructor(agentService: AgentService);
-    createAgent(createAgentDto: CreateAgentDto): Promise<import("./agent.service").Agent>;
+    createAgent(body: AgentConfigDto): Promise<import("./agent.service").Agent>;
     getAgent(id: string): Promise<import("./agent.service").Agent>;
     updateAgent(id: string, updateAgentDto: UpdateAgentDto): Promise<import("./agent.service").Agent>;
     deleteAgent(id: string): Promise<{

@@ -4,7 +4,7 @@ import { AgentController } from './agent.controller';
 import { RedisModule } from '../redis/redis.module';
 import { LlmModule } from '../llm/llm.module';
 import { MemoryModule } from './memory/memory.module';
-import { TaskModule } from './tasks/task.module';
+import { TaskModule } from './task.module';
 import { AgentManagerModule } from './manager/agent-manager.module';
 
 @Module({

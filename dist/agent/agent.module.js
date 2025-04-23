@@ -13,7 +13,7 @@ const agent_controller_1 = require("./agent.controller");
 const redis_module_1 = require("../redis/redis.module");
 const llm_module_1 = require("../llm/llm.module");
 const memory_module_1 = require("./memory/memory.module");
-const task_module_1 = require("./tasks/task.module");
+const task_module_1 = require("./task.module");
 const agent_manager_module_1 = require("./manager/agent-manager.module");
 let AgentModule = class AgentModule {
 };

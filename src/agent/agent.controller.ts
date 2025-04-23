@@ -227,12 +227,12 @@ export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
   @Post()
-  async createAgent(@Body(new ValidationPipe({ transform: true })) createAgentDto: CreateAgentDto) {
+  async createAgent(@Body(new ValidationPipe({ transform: true })) body: AgentConfigDto) {
     try {
-      return await this.agentService.createAgent(
-        createAgentDto.config, 
-        createAgentDto.conversation_details
-      );
+      // Set default values
+      body.assistant_status = body.assistant_status || 'created';
+      
+      return await this.agentService.createAgent(body);
     } catch (error) {
       this.logger.error(`Error creating agent: ${error.message}`, error.stack);
       throw new HttpException(

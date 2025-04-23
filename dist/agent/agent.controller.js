@@ -284,9 +284,10 @@ let AgentController = AgentController_1 = class AgentController {
     constructor(agentService) {
         this.agentService = agentService;
     }
-    async createAgent(createAgentDto) {
+    async createAgent(body) {
         try {
-            return await this.agentService.createAgent(createAgentDto.config, createAgentDto.conversation_details);
+            body.assistant_status = body.assistant_status || 'created';
+            return await this.agentService.createAgent(body);
         }
         catch (error) {
             this.logger.error(`Error creating agent: ${error.message}`, error.stack);
@@ -397,7 +398,7 @@ __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe({ transform: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [CreateAgentDto]),
+    __metadata("design:paramtypes", [AgentConfigDto]),
     __metadata("design:returntype", Promise)
 ], AgentController.prototype, "createAgent", null);
 __decorate([

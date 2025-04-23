@@ -2,7 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { AgentManagerService } from './agent-manager.service';
 import { AgentModule } from '../agent.module';
 import { MemoryModule } from '../memory/memory.module';
-import { TaskModule } from '../tasks/task.module';
+import { TaskModule } from '../task.module';
 import { LlmModule } from '../../llm/llm.module';
 import { AsrModule } from '../../asr/asr.module';
 import { TtsModule } from '../../tts/tts.module';
