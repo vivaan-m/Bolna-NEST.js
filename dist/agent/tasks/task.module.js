@@ -6,22 +6,20 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebsocketModule = void 0;
+exports.TaskModule = void 0;
 const common_1 = require("@nestjs/common");
-const websocket_gateway_1 = require("./websocket.gateway");
-const agent_module_1 = require("../agent/agent.module");
-const agent_manager_module_1 = require("../agent/manager/agent-manager.module");
-let WebsocketModule = class WebsocketModule {
+const task_service_1 = require("./task.service");
+const llm_module_1 = require("../../llm/llm.module");
+let TaskModule = class TaskModule {
 };
-exports.WebsocketModule = WebsocketModule;
-exports.WebsocketModule = WebsocketModule = __decorate([
+exports.TaskModule = TaskModule;
+exports.TaskModule = TaskModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            agent_module_1.AgentModule,
-            agent_manager_module_1.AgentManagerModule,
+            (0, common_1.forwardRef)(() => llm_module_1.LlmModule),
         ],
-        providers: [websocket_gateway_1.WebsocketGateway],
-        exports: [websocket_gateway_1.WebsocketGateway],
+        providers: [task_service_1.TaskService],
+        exports: [task_service_1.TaskService],
     })
-], WebsocketModule);
-//# sourceMappingURL=websocket.module.js.map
+], TaskModule);
+//# sourceMappingURL=task.module.js.map

@@ -18,32 +18,28 @@ const websockets_1 = require("@nestjs/websockets");
 const common_1 = require("@nestjs/common");
 const socket_io_1 = require("socket.io");
 const agent_service_1 = require("../agent/agent.service");
-const asr_service_1 = require("../asr/asr.service");
-const llm_service_1 = require("../llm/llm.service");
-const tts_service_1 = require("../tts/tts.service");
+const agent_manager_service_1 = require("../agent/manager/agent-manager.service");
 let WebsocketGateway = WebsocketGateway_1 = class WebsocketGateway {
     agentService;
-    asrService;
-    llmService;
-    ttsService;
+    agentManagerService;
     server;
     logger = new common_1.Logger(WebsocketGateway_1.name);
     clients = new Map();
-    constructor(agentService, asrService, llmService, ttsService) {
+    constructor(agentService, agentManagerService) {
         this.agentService = agentService;
-        this.asrService = asrService;
-        this.llmService = llmService;
-        this.ttsService = ttsService;
+        this.agentManagerService = agentManagerService;
     }
     handleConnection(client) {
         this.logger.log(`Client connected: ${client.id}`);
-        this.clients.set(client.id, {
-            socket: client,
-            conversation: []
-        });
+        this.clients.set(client.id, { socket: client });
     }
     handleDisconnect(client) {
         this.logger.log(`Client disconnected: ${client.id}`);
+        const clientData = this.clients.get(client.id);
+        if (clientData?.agentId) {
+            this.agentManagerService.resetConversation(clientData.agentId)
+                .catch(error => this.logger.error(`Error resetting conversation: ${error.message}`));
+        }
         this.clients.delete(client.id);
     }
     async handleRegister(client, data) {
@@ -55,22 +51,34 @@ let WebsocketGateway = WebsocketGateway_1 = class WebsocketGateway {
                 client.emit('error', { message: `Agent with ID ${agentId} not found` });
                 return;
             }
-            const clientData = this.clients.get(client.id);
-            if (clientData) {
-                this.clients.set(client.id, {
-                    ...clientData,
-                    agentId,
-                    callId,
-                    provider,
-                    conversation: [
-                        {
-                            role: 'system',
-                            content: agent.config.llm.systemPrompt || 'You are a helpful assistant.',
-                        },
-                    ],
-                });
+            this.clients.set(client.id, {
+                socket: client,
+                agentId,
+                callId,
+                provider,
+            });
+            await this.agentManagerService.resetConversation(agentId);
+            client.emit('registered', {
+                agentId,
+                agent: {
+                    name: agent.config.name,
+                    description: agent.config.description,
+                }
+            });
+            if (agent.conversation_details?.system_prompt) {
+                const welcomeMessage = agent.conversation_details.system_prompt
+                    .split('[WELCOME_MESSAGE]')[1]?.trim();
+                if (welcomeMessage) {
+                    const response = await this.agentManagerService.processText(agentId, welcomeMessage, (chunk) => {
+                        client.emit('audio-chunk', { audio: chunk.toString('base64') });
+                    });
+                    client.emit('message', {
+                        role: 'assistant',
+                        content: response.text,
+                        taskResults: response.taskResults,
+                    });
+                }
             }
-            client.emit('registered', { agentId });
         }
         catch (error) {
             this.logger.error(`Error registering client: ${error.message}`);
@@ -80,38 +88,18 @@ let WebsocketGateway = WebsocketGateway_1 = class WebsocketGateway {
     async handleAudio(client, data) {
         try {
             const clientData = this.clients.get(client.id);
-            if (!clientData || !clientData.agentId) {
+            if (!clientData?.agentId) {
                 client.emit('error', { message: 'Client not registered with an agent' });
                 return;
             }
-            const agent = await this.agentService.getAgent(clientData.agentId);
-            if (!agent) {
-                client.emit('error', { message: `Agent with ID ${clientData.agentId} not found` });
-                return;
-            }
-            const asrResult = await this.asrService.transcribe(data.audio, agent.config.asr);
-            if (asrResult.text.trim() === '') {
-                return;
-            }
-            client.emit('transcript', { text: asrResult.text, isFinal: asrResult.isFinal });
-            if (!asrResult.isFinal) {
-                return;
-            }
-            clientData.conversation.push({
-                role: 'user',
-                content: asrResult.text,
+            const audioBuffer = Buffer.from(data.audio, 'base64');
+            const response = await this.agentManagerService.processAudio(clientData.agentId, audioBuffer, (chunk) => {
+                client.emit('audio-chunk', { audio: chunk.toString('base64') });
             });
-            let fullResponse = '';
-            await this.llmService.streamResponse(clientData.conversation, agent.config.llm, (chunk) => {
-                client.emit('llm-chunk', { text: chunk });
-                fullResponse += chunk;
-            });
-            clientData.conversation.push({
+            client.emit('message', {
                 role: 'assistant',
-                content: fullResponse,
-            });
-            await this.ttsService.streamSynthesize(fullResponse, agent.config.tts, (chunk) => {
-                client.emit('audio-chunk', { audio: chunk });
+                content: response.text,
+                taskResults: response.taskResults,
             });
         }
         catch (error) {
@@ -122,30 +110,21 @@ let WebsocketGateway = WebsocketGateway_1 = class WebsocketGateway {
     async handleText(client, data) {
         try {
             const clientData = this.clients.get(client.id);
-            if (!clientData || !clientData.agentId) {
+            if (!clientData?.agentId) {
                 client.emit('error', { message: 'Client not registered with an agent' });
                 return;
             }
-            const agent = await this.agentService.getAgent(clientData.agentId);
-            if (!agent) {
-                client.emit('error', { message: `Agent with ID ${clientData.agentId} not found` });
-                return;
-            }
-            clientData.conversation.push({
+            client.emit('message', {
                 role: 'user',
-                content: data.text,
+                content: data.text
             });
-            let fullResponse = '';
-            await this.llmService.streamResponse(clientData.conversation, agent.config.llm, (chunk) => {
-                client.emit('llm-chunk', { text: chunk });
-                fullResponse += chunk;
+            const response = await this.agentManagerService.processText(clientData.agentId, data.text, (chunk) => {
+                client.emit('audio-chunk', { audio: chunk.toString('base64') });
             });
-            clientData.conversation.push({
+            client.emit('message', {
                 role: 'assistant',
-                content: fullResponse,
-            });
-            await this.ttsService.streamSynthesize(fullResponse, agent.config.tts, (chunk) => {
-                client.emit('audio-chunk', { audio: chunk });
+                content: response.text,
+                taskResults: response.taskResults,
             });
         }
         catch (error) {
@@ -153,10 +132,40 @@ let WebsocketGateway = WebsocketGateway_1 = class WebsocketGateway {
             client.emit('error', { message: error.message });
         }
     }
+    async handleReset(client) {
+        try {
+            const clientData = this.clients.get(client.id);
+            if (!clientData?.agentId) {
+                client.emit('error', { message: 'Client not registered with an agent' });
+                return;
+            }
+            await this.agentManagerService.resetConversation(clientData.agentId);
+            client.emit('reset', { success: true });
+        }
+        catch (error) {
+            this.logger.error(`Error resetting conversation: ${error.message}`);
+            client.emit('error', { message: error.message });
+        }
+    }
+    async handleHistory(client) {
+        try {
+            const clientData = this.clients.get(client.id);
+            if (!clientData?.agentId) {
+                client.emit('error', { message: 'Client not registered with an agent' });
+                return;
+            }
+            const history = await this.agentManagerService.getConversationHistory(clientData.agentId);
+            client.emit('history', { messages: history });
+        }
+        catch (error) {
+            this.logger.error(`Error getting conversation history: ${error.message}`);
+            client.emit('error', { message: error.message });
+        }
+    }
     async handleEndCall(client) {
         try {
             const clientData = this.clients.get(client.id);
-            if (!clientData || !clientData.callId || !clientData.provider) {
+            if (!clientData?.callId || !clientData?.provider) {
                 client.emit('error', { message: 'No active call to end' });
                 return;
             }
@@ -203,6 +212,20 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], WebsocketGateway.prototype, "handleText", null);
 __decorate([
+    (0, websockets_1.SubscribeMessage)('reset'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket]),
+    __metadata("design:returntype", Promise)
+], WebsocketGateway.prototype, "handleReset", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('history'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [socket_io_1.Socket]),
+    __metadata("design:returntype", Promise)
+], WebsocketGateway.prototype, "handleHistory", null);
+__decorate([
     (0, websockets_1.SubscribeMessage)('end-call'),
     __param(0, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
@@ -216,8 +239,6 @@ exports.WebsocketGateway = WebsocketGateway = WebsocketGateway_1 = __decorate([
         },
     }),
     __metadata("design:paramtypes", [agent_service_1.AgentService,
-        asr_service_1.AsrService,
-        llm_service_1.LlmService,
-        tts_service_1.TtsService])
+        agent_manager_service_1.AgentManagerService])
 ], WebsocketGateway);
 //# sourceMappingURL=websocket.gateway.js.map

@@ -11,12 +11,22 @@ const common_1 = require("@nestjs/common");
 const agent_service_1 = require("./agent.service");
 const agent_controller_1 = require("./agent.controller");
 const redis_module_1 = require("../redis/redis.module");
+const llm_module_1 = require("../llm/llm.module");
+const memory_module_1 = require("./memory/memory.module");
+const task_module_1 = require("./tasks/task.module");
+const agent_manager_module_1 = require("./manager/agent-manager.module");
 let AgentModule = class AgentModule {
 };
 exports.AgentModule = AgentModule;
 exports.AgentModule = AgentModule = __decorate([
     (0, common_1.Module)({
-        imports: [redis_module_1.RedisModule],
+        imports: [
+            redis_module_1.RedisModule,
+            (0, common_1.forwardRef)(() => llm_module_1.LlmModule),
+            memory_module_1.MemoryModule,
+            task_module_1.TaskModule,
+            (0, common_1.forwardRef)(() => agent_manager_module_1.AgentManagerModule),
+        ],
         controllers: [agent_controller_1.AgentController],
         providers: [agent_service_1.AgentService],
         exports: [agent_service_1.AgentService],

@@ -12,6 +12,7 @@ const config_1 = require("@nestjs/config");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const agent_module_1 = require("./agent/agent.module");
+const agent_manager_module_1 = require("./agent/manager/agent-manager.module");
 const telephony_module_1 = require("./telephony/telephony.module");
 const asr_module_1 = require("./asr/asr.module");
 const llm_module_1 = require("./llm/llm.module");
@@ -28,13 +29,14 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
                 envFilePath: '.env',
             }),
+            redis_module_1.RedisModule,
             agent_module_1.AgentModule,
+            agent_manager_module_1.AgentManagerModule,
             telephony_module_1.TelephonyModule,
             asr_module_1.AsrModule,
             llm_module_1.LlmModule,
             tts_module_1.TtsModule,
             websocket_module_1.WebsocketModule,
-            redis_module_1.RedisModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

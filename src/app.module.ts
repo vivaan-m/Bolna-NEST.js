@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AgentModule } from './agent/agent.module';
+import { AgentManagerModule } from './agent/manager/agent-manager.module';
 import { TelephonyModule } from './telephony/telephony.module';
 import { AsrModule } from './asr/asr.module';
 import { LlmModule } from './llm/llm.module';
@@ -16,13 +17,14 @@ import { RedisModule } from './redis/redis.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    RedisModule,
     AgentModule,
+    AgentManagerModule,
     TelephonyModule,
     AsrModule,
     LlmModule,
     TtsModule,
     WebsocketModule,
-    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

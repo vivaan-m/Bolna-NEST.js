@@ -5,6 +5,7 @@ import { TelephonyModule } from './telephony/telephony.module';
 import { RedisModule } from './redis/redis.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { AgentModule } from './agent/agent.module';
+import { AgentManagerModule } from './agent/manager/agent-manager.module';
 import { AsrModule } from './asr/asr.module';
 import { LlmModule } from './llm/llm.module';
 import { TtsModule } from './tts/tts.module';
@@ -104,6 +105,7 @@ import { Module } from '@nestjs/common';
     RedisModule,
     WebsocketModule,
     AgentModule,
+    AgentManagerModule,
     AsrModule,
     LlmModule,
     TtsModule,

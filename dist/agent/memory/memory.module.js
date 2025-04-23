@@ -6,22 +6,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebsocketModule = void 0;
+exports.MemoryModule = void 0;
 const common_1 = require("@nestjs/common");
-const websocket_gateway_1 = require("./websocket.gateway");
-const agent_module_1 = require("../agent/agent.module");
-const agent_manager_module_1 = require("../agent/manager/agent-manager.module");
-let WebsocketModule = class WebsocketModule {
+const memory_service_1 = require("./memory.service");
+const redis_module_1 = require("../../redis/redis.module");
+let MemoryModule = class MemoryModule {
 };
-exports.WebsocketModule = WebsocketModule;
-exports.WebsocketModule = WebsocketModule = __decorate([
+exports.MemoryModule = MemoryModule;
+exports.MemoryModule = MemoryModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            agent_module_1.AgentModule,
-            agent_manager_module_1.AgentManagerModule,
-        ],
-        providers: [websocket_gateway_1.WebsocketGateway],
-        exports: [websocket_gateway_1.WebsocketGateway],
+        imports: [redis_module_1.RedisModule],
+        providers: [memory_service_1.MemoryService],
+        exports: [memory_service_1.MemoryService],
     })
-], WebsocketModule);
-//# sourceMappingURL=websocket.module.js.map
+], MemoryModule);
+//# sourceMappingURL=memory.module.js.map

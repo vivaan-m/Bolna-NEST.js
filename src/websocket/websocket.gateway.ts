@@ -10,9 +10,14 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { AgentService } from '../agent/agent.service';
-import { AsrService } from '../asr/asr.service';
-import { LlmService, Message } from '../llm/llm.service';
-import { TtsService } from '../tts/tts.service';
+import { AgentManagerService } from '../agent/manager/agent-manager.service';
+
+interface ClientData {
+  socket: Socket;
+  agentId?: string;
+  callId?: string;
+  provider?: string;
+}
 
 @WebSocketGateway({
   cors: {
@@ -24,31 +29,30 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   server: Server;
 
   private readonly logger = new Logger(WebsocketGateway.name);
-  private readonly clients = new Map<string, { 
-    socket: Socket, 
-    agentId?: string,
-    conversation: Message[],
-    callId?: string,
-    provider?: string
-  }>();
+  private readonly clients = new Map<string, ClientData>();
 
   constructor(
     private readonly agentService: AgentService,
-    private readonly asrService: AsrService,
-    private readonly llmService: LlmService,
-    private readonly ttsService: TtsService,
+    private readonly agentManagerService: AgentManagerService,
   ) {}
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
-    this.clients.set(client.id, { 
-      socket: client,
-      conversation: []
-    });
+    this.clients.set(client.id, { socket: client });
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
+    
+    // Get client data
+    const clientData = this.clients.get(client.id);
+    
+    // Reset conversation if agent is registered
+    if (clientData?.agentId) {
+      this.agentManagerService.resetConversation(clientData.agentId)
+        .catch(error => this.logger.error(`Error resetting conversation: ${error.message}`));
+    }
+    
     this.clients.delete(client.id);
   }
 
@@ -62,6 +66,7 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
       
       this.logger.log(`Registering client ${client.id} with agent ${agentId}`);
       
+      // Check if agent exists
       const agent = await this.agentService.getAgent(agentId);
       
       if (!agent) {
@@ -69,24 +74,47 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
         return;
       }
       
-      const clientData = this.clients.get(client.id);
+      // Update client data
+      this.clients.set(client.id, {
+        socket: client,
+        agentId,
+        callId,
+        provider,
+      });
       
-      if (clientData) {
-        this.clients.set(client.id, {
-          ...clientData,
-          agentId,
-          callId,
-          provider,
-          conversation: [
-            {
-              role: 'system',
-              content: agent.config.llm.systemPrompt || 'You are a helpful assistant.',
-            },
-          ],
-        });
+      // Reset conversation for the agent
+      await this.agentManagerService.resetConversation(agentId);
+      
+      client.emit('registered', { 
+        agentId,
+        agent: {
+          name: agent.config.name,
+          description: agent.config.description,
+        }
+      });
+      
+      // Send welcome message if available
+      if (agent.conversation_details?.system_prompt) {
+        const welcomeMessage = agent.conversation_details.system_prompt
+          .split('[WELCOME_MESSAGE]')[1]?.trim();
+        
+        if (welcomeMessage) {
+          // Process welcome message
+          const response = await this.agentManagerService.processText(
+            agentId,
+            welcomeMessage,
+            (chunk) => {
+              client.emit('audio-chunk', { audio: chunk.toString('base64') });
+            }
+          );
+          
+          client.emit('message', { 
+            role: 'assistant', 
+            content: response.text,
+            taskResults: response.taskResults,
+          });
+        }
       }
-      
-      client.emit('registered', { agentId });
     } catch (error) {
       this.logger.error(`Error registering client: ${error.message}`);
       client.emit('error', { message: error.message });
@@ -96,68 +124,34 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   @SubscribeMessage('audio')
   async handleAudio(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { audio: Buffer }
+    @MessageBody() data: { audio: string }
   ) {
     try {
       const clientData = this.clients.get(client.id);
       
-      if (!clientData || !clientData.agentId) {
+      if (!clientData?.agentId) {
         client.emit('error', { message: 'Client not registered with an agent' });
         return;
       }
       
-      const agent = await this.agentService.getAgent(clientData.agentId);
+      // Convert base64 audio to buffer
+      const audioBuffer = Buffer.from(data.audio, 'base64');
       
-      if (!agent) {
-        client.emit('error', { message: `Agent with ID ${clientData.agentId} not found` });
-        return;
-      }
-      
-      // Process audio with ASR
-      const asrResult = await this.asrService.transcribe(data.audio, agent.config.asr);
-      
-      if (asrResult.text.trim() === '') {
-        return;
-      }
-      
-      client.emit('transcript', { text: asrResult.text, isFinal: asrResult.isFinal });
-      
-      if (!asrResult.isFinal) {
-        return;
-      }
-      
-      // Add user message to conversation
-      clientData.conversation.push({
-        role: 'user',
-        content: asrResult.text,
-      });
-      
-      // Generate response with LLM
-      let fullResponse = '';
-      
-      await this.llmService.streamResponse(
-        clientData.conversation,
-        agent.config.llm,
+      // Process audio with agent manager
+      const response = await this.agentManagerService.processAudio(
+        clientData.agentId,
+        audioBuffer,
         (chunk) => {
-          client.emit('llm-chunk', { text: chunk });
-          fullResponse += chunk;
+          client.emit('audio-chunk', { audio: chunk.toString('base64') });
         }
       );
       
-      // Add assistant message to conversation
-      clientData.conversation.push({
-        role: 'assistant',
-        content: fullResponse,
+      // Send response
+      client.emit('message', { 
+        role: 'assistant', 
+        content: response.text,
+        taskResults: response.taskResults,
       });
-      
-      // Synthesize speech with TTS
-      await this.ttsService.streamSynthesize(
-        fullResponse,
-        agent.config.tts,
-        (chunk) => {
-          client.emit('audio-chunk', { audio: chunk });
-        }
-      );
     } catch (error) {
       this.logger.error(`Error processing audio: ${error.message}`);
       client.emit('error', { message: error.message });
@@ -172,52 +166,78 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     try {
       const clientData = this.clients.get(client.id);
       
-      if (!clientData || !clientData.agentId) {
+      if (!clientData?.agentId) {
         client.emit('error', { message: 'Client not registered with an agent' });
         return;
       }
       
-      const agent = await this.agentService.getAgent(clientData.agentId);
+      // Send user message to client
+      client.emit('message', { 
+        role: 'user', 
+        content: data.text 
+      });
       
-      if (!agent) {
-        client.emit('error', { message: `Agent with ID ${clientData.agentId} not found` });
+      // Process text with agent manager
+      const response = await this.agentManagerService.processText(
+        clientData.agentId,
+        data.text,
+        (chunk) => {
+          client.emit('audio-chunk', { audio: chunk.toString('base64') });
+        }
+      );
+      
+      // Send response
+      client.emit('message', { 
+        role: 'assistant', 
+        content: response.text,
+        taskResults: response.taskResults,
+      });
+    } catch (error) {
+      this.logger.error(`Error processing text: ${error.message}`);
+      client.emit('error', { message: error.message });
+    }
+  }
+
+  @SubscribeMessage('reset')
+  async handleReset(
+    @ConnectedSocket() client: Socket
+  ) {
+    try {
+      const clientData = this.clients.get(client.id);
+      
+      if (!clientData?.agentId) {
+        client.emit('error', { message: 'Client not registered with an agent' });
         return;
       }
       
-      // Add user message to conversation
-      clientData.conversation.push({
-        role: 'user',
-        content: data.text,
-      });
+      // Reset conversation
+      await this.agentManagerService.resetConversation(clientData.agentId);
       
-      // Generate response with LLM
-      let fullResponse = '';
-      
-      await this.llmService.streamResponse(
-        clientData.conversation,
-        agent.config.llm,
-        (chunk) => {
-          client.emit('llm-chunk', { text: chunk });
-          fullResponse += chunk;
-        }
-      );
-      
-      // Add assistant message to conversation
-      clientData.conversation.push({
-        role: 'assistant',
-        content: fullResponse,
-      });
-      
-      // Synthesize speech with TTS
-      await this.ttsService.streamSynthesize(
-        fullResponse,
-        agent.config.tts,
-        (chunk) => {
-          client.emit('audio-chunk', { audio: chunk });
-        }
-      );
+      client.emit('reset', { success: true });
     } catch (error) {
-      this.logger.error(`Error processing text: ${error.message}`);
+      this.logger.error(`Error resetting conversation: ${error.message}`);
+      client.emit('error', { message: error.message });
+    }
+  }
+
+  @SubscribeMessage('history')
+  async handleHistory(
+    @ConnectedSocket() client: Socket
+  ) {
+    try {
+      const clientData = this.clients.get(client.id);
+      
+      if (!clientData?.agentId) {
+        client.emit('error', { message: 'Client not registered with an agent' });
+        return;
+      }
+      
+      // Get conversation history
+      const history = await this.agentManagerService.getConversationHistory(clientData.agentId);
+      
+      client.emit('history', { messages: history });
+    } catch (error) {
+      this.logger.error(`Error getting conversation history: ${error.message}`);
       client.emit('error', { message: error.message });
     }
   }
@@ -229,7 +249,7 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     try {
       const clientData = this.clients.get(client.id);
       
-      if (!clientData || !clientData.callId || !clientData.provider) {
+      if (!clientData?.callId || !clientData?.provider) {
         client.emit('error', { message: 'No active call to end' });
         return;
       }

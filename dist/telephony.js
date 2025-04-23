@@ -16,6 +16,7 @@ const telephony_module_1 = require("./telephony/telephony.module");
 const redis_module_1 = require("./redis/redis.module");
 const websocket_module_1 = require("./websocket/websocket.module");
 const agent_module_1 = require("./agent/agent.module");
+const agent_manager_module_1 = require("./agent/manager/agent-manager.module");
 const asr_module_1 = require("./asr/asr.module");
 const llm_module_1 = require("./llm/llm.module");
 const tts_module_1 = require("./tts/tts.module");
@@ -123,6 +124,7 @@ TelephonyServerModule = __decorate([
             redis_module_1.RedisModule,
             websocket_module_1.WebsocketModule,
             agent_module_1.AgentModule,
+            agent_manager_module_1.AgentManagerModule,
             asr_module_1.AsrModule,
             llm_module_1.LlmModule,
             tts_module_1.TtsModule,

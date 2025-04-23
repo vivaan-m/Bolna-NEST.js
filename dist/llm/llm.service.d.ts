@@ -2,6 +2,7 @@ import { OpenAiLlmService } from './providers/openai-llm.service';
 export interface Message {
     role: 'system' | 'user' | 'assistant';
     content: string;
+    timestamp?: string;
 }
 export interface LlmOptions {
     provider: string;
