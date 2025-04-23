@@ -1,4 +1,4 @@
-FROM node:18-alpine AS build
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -6,26 +6,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
 
 # Build the application
 RUN npm run build
-
-# Remove development dependencies
-RUN npm prune --production
-
-# Production stage
-FROM node:18-alpine
-
-WORKDIR /app
-
-# Copy built assets from the build stage
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/package*.json ./
 
 # Create directory for agent data
 RUN mkdir -p /app/agent_data && chmod 777 /app/agent_data
@@ -38,4 +25,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Start the application
-CMD ["node", "dist/main"]
+CMD ["npm", "run", "start:prod"]
