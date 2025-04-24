@@ -17,9 +17,11 @@ interface ClientData {
   agentId?: string;
   callId?: string;
   provider?: string;
+  streamSid?: string;
 }
 
 @WebSocketGateway({
+  namespace: 'chat/v1',
   cors: {
     origin: '*',
   },
@@ -36,9 +38,63 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     private readonly agentManagerService: AgentManagerService,
   ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
-    this.clients.set(client.id, { socket: client });
+    
+    // Extract agent ID from handshake query or params
+    const agentId = client.handshake.query.agentId as string || 
+                    client.handshake.auth.agentId;
+    
+    if (!agentId) {
+      this.logger.error('No agent ID provided');
+      client.emit('error', { message: 'No agent ID provided' });
+      client.disconnect();
+      return;
+    }
+    
+    this.logger.log(`Agent ID: ${agentId}`);
+    
+    // Store client data
+    this.clients.set(client.id, { 
+      socket: client,
+      agentId
+    });
+    
+    // Check if agent exists
+    try {
+      const agent = await this.agentService.getAgent(agentId);
+      
+      if (!agent) {
+        client.emit('error', { message: `Agent with ID ${agentId} not found` });
+        client.disconnect();
+        return;
+      }
+      
+      // Reset conversation for the agent
+      await this.agentManagerService.resetConversation(agentId);
+      
+      // Send welcome message if available
+      if (agent.conversation_details?.system_prompt) {
+        const welcomeMessage = agent.conversation_details.system_prompt
+          .split('[WELCOME_MESSAGE]')[1]?.trim();
+        
+        if (welcomeMessage) {
+          // Process welcome message
+          const response = await this.agentManagerService.processText(
+            agentId,
+            welcomeMessage,
+            (chunk) => {
+              this.sendAudioChunk(client, chunk);
+            }
+          );
+          
+          this.sendTextMessage(client, response.text);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error initializing connection: ${error.message}`);
+      client.emit('error', { message: error.message });
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -56,102 +112,38 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     this.clients.delete(client.id);
   }
 
-  @SubscribeMessage('register')
-  async handleRegister(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { agentId: string, callId?: string, provider?: string }
-  ) {
-    try {
-      const { agentId, callId, provider } = data;
-      
-      this.logger.log(`Registering client ${client.id} with agent ${agentId}`);
-      
-      // Check if agent exists
-      const agent = await this.agentService.getAgent(agentId);
-      
-      if (!agent) {
-        client.emit('error', { message: `Agent with ID ${agentId} not found` });
-        return;
-      }
-      
-      // Update client data
-      this.clients.set(client.id, {
-        socket: client,
-        agentId,
-        callId,
-        provider,
-      });
-      
-      // Reset conversation for the agent
-      await this.agentManagerService.resetConversation(agentId);
-      
-      client.emit('registered', { 
-        agentId,
-        agent: {
-          name: agent.config.name,
-          description: agent.config.description,
-        }
-      });
-      
-      // Send welcome message if available
-      if (agent.conversation_details?.system_prompt) {
-        const welcomeMessage = agent.conversation_details.system_prompt
-          .split('[WELCOME_MESSAGE]')[1]?.trim();
-        
-        if (welcomeMessage) {
-          // Process welcome message
-          const response = await this.agentManagerService.processText(
-            agentId,
-            welcomeMessage,
-            (chunk) => {
-              client.emit('audio-chunk', { audio: chunk.toString('base64') });
-            }
-          );
-          
-          client.emit('message', { 
-            role: 'assistant', 
-            content: response.text,
-            taskResults: response.taskResults,
-          });
-        }
-      }
-    } catch (error) {
-      this.logger.error(`Error registering client: ${error.message}`);
-      client.emit('error', { message: error.message });
-    }
-  }
-
   @SubscribeMessage('audio')
-  async handleAudio(
+  async handleAudioMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { audio: string }
+    @MessageBody() message: { data: string, meta_info?: any }
   ) {
+    const clientData = this.clients.get(client.id);
+    
+    if (!clientData?.agentId) {
+      client.emit('error', { message: 'No agent ID associated with this connection' });
+      return;
+    }
+    
     try {
-      const clientData = this.clients.get(client.id);
-      
-      if (!clientData?.agentId) {
-        client.emit('error', { message: 'Client not registered with an agent' });
-        return;
+      // Extract stream SID from meta_info if present
+      if (message.meta_info?.stream_sid) {
+        clientData.streamSid = message.meta_info.stream_sid;
       }
       
       // Convert base64 audio to buffer
-      const audioBuffer = Buffer.from(data.audio, 'base64');
+      const audioBuffer = Buffer.from(message.data, 'base64');
       
       // Process audio with agent manager
       const response = await this.agentManagerService.processAudio(
         clientData.agentId,
         audioBuffer,
         (chunk) => {
-          client.emit('audio-chunk', { audio: chunk.toString('base64') });
+          this.sendAudioChunk(client, chunk, clientData.streamSid);
         }
       );
       
-      // Send response
-      client.emit('message', { 
-        role: 'assistant', 
-        content: response.text,
-        taskResults: response.taskResults,
-      });
+      // Send final text response
+      this.sendTextMessage(client, response.text);
     } catch (error) {
       this.logger.error(`Error processing audio: ${error.message}`);
       client.emit('error', { message: error.message });
@@ -159,113 +151,73 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   }
 
   @SubscribeMessage('text')
-  async handleText(
+  async handleTextMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { text: string }
+    @MessageBody() message: { data: string }
   ) {
+    const clientData = this.clients.get(client.id);
+    
+    if (!clientData?.agentId) {
+      client.emit('error', { message: 'No agent ID associated with this connection' });
+      return;
+    }
+    
     try {
-      const clientData = this.clients.get(client.id);
-      
-      if (!clientData?.agentId) {
-        client.emit('error', { message: 'Client not registered with an agent' });
-        return;
-      }
-      
-      // Send user message to client
-      client.emit('message', { 
-        role: 'user', 
-        content: data.text 
-      });
-      
       // Process text with agent manager
       const response = await this.agentManagerService.processText(
         clientData.agentId,
-        data.text,
+        message.data,
         (chunk) => {
-          client.emit('audio-chunk', { audio: chunk.toString('base64') });
+          this.sendAudioChunk(client, chunk, clientData.streamSid);
         }
       );
       
-      // Send response
-      client.emit('message', { 
-        role: 'assistant', 
-        content: response.text,
-        taskResults: response.taskResults,
-      });
+      // Send final text response
+      this.sendTextMessage(client, response.text);
     } catch (error) {
       this.logger.error(`Error processing text: ${error.message}`);
       client.emit('error', { message: error.message });
     }
   }
 
-  @SubscribeMessage('reset')
-  async handleReset(
-    @ConnectedSocket() client: Socket
-  ) {
+  @SubscribeMessage('clear')
+  async handleClearMessage(@ConnectedSocket() client: Socket) {
+    const clientData = this.clients.get(client.id);
+    
+    if (!clientData?.agentId) {
+      client.emit('error', { message: 'No agent ID associated with this connection' });
+      return;
+    }
+    
     try {
-      const clientData = this.clients.get(client.id);
-      
-      if (!clientData?.agentId) {
-        client.emit('error', { message: 'Client not registered with an agent' });
-        return;
-      }
-      
-      // Reset conversation
-      await this.agentManagerService.resetConversation(clientData.agentId);
-      
-      client.emit('reset', { success: true });
+      // Send clear message to client
+      client.emit('clear', { data: null });
     } catch (error) {
-      this.logger.error(`Error resetting conversation: ${error.message}`);
-      client.emit('error', { message: error.message });
+      this.logger.error(`Error handling clear message: ${error.message}`);
     }
   }
 
-  @SubscribeMessage('history')
-  async handleHistory(
-    @ConnectedSocket() client: Socket
-  ) {
-    try {
-      const clientData = this.clients.get(client.id);
-      
-      if (!clientData?.agentId) {
-        client.emit('error', { message: 'Client not registered with an agent' });
-        return;
+  private sendAudioChunk(client: Socket, chunk: Buffer, streamSid?: string) {
+    const base64Audio = chunk.toString('base64');
+    
+    client.emit('audio', {
+      data: base64Audio,
+      meta_info: {
+        format: 'wav',
+        sequence_id: Date.now(),
+        is_first_chunk: false,
+        end_of_llm_stream: false,
+        end_of_synthesizer_stream: false,
+        cached: false,
+        message_category: 'agent_response',
+        stream_sid: streamSid
       }
-      
-      // Get conversation history
-      const history = await this.agentManagerService.getConversationHistory(clientData.agentId);
-      
-      client.emit('history', { messages: history });
-    } catch (error) {
-      this.logger.error(`Error getting conversation history: ${error.message}`);
-      client.emit('error', { message: error.message });
-    }
+    });
   }
 
-  @SubscribeMessage('end-call')
-  async handleEndCall(
-    @ConnectedSocket() client: Socket
-  ) {
-    try {
-      const clientData = this.clients.get(client.id);
-      
-      if (!clientData?.callId || !clientData?.provider) {
-        client.emit('error', { message: 'No active call to end' });
-        return;
-      }
-      
-      // In a real implementation, you would call the telephony service to end the call
-      client.emit('call-ended', { callId: clientData.callId });
-      
-      // Clear call data
-      this.clients.set(client.id, {
-        ...clientData,
-        callId: undefined,
-        provider: undefined,
-      });
-    } catch (error) {
-      this.logger.error(`Error ending call: ${error.message}`);
-      client.emit('error', { message: error.message });
-    }
+  private sendTextMessage(client: Socket, text: string) {
+    client.emit('text', {
+      data: text
+    });
   }
 }

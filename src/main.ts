@@ -33,6 +33,7 @@ async function bootstrap() {
   
   if (appType === 'api') {
     logger.log(`API server is running on: http://localhost:${port}`);
+    logger.log(`Socket.IO server is available at: http://localhost:${port}/chat/v1`);
   } else {
     logger.log(`Application is running on: http://localhost:${port}`);
   }
